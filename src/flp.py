@@ -1,4 +1,5 @@
 import pyomo.environ as pyo
+import sys
 
 
 def read_instance(file_name):
@@ -27,9 +28,11 @@ def read_instance(file_name):
     except:
         print("Error reading file.")
     return opening_cost, demand, capacity, travel_cost
+# cost to open each factory, demand of each customer, capacity of each factory, travel cost from factory i to customer j
 
 
 def solve_flp(instance_name, linear):
+    print(read_instance(instance_name))  # test
     pass
     # return (obj,x,y)
 
@@ -42,3 +45,7 @@ def initial_solution_flp(instance_name):
 def local_search_flp(x, y):
     pass
     # return (obj,x,y)
+
+
+if __name__ == '__main__':
+    solve_flp('FLP-100-20-1.txt', False)  # test
