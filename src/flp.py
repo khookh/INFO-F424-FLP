@@ -87,38 +87,14 @@ def solve_flp(instance_name, linear):
 
     opt = pyo.SolverFactory('glpk')
     opt.solve(model, tee=True)
-    
+
     return pyo.value(model.obj), model.x, model.y
 
 
-def initial_solution_flp(instance_name):
-    instance_param = read_instance(instance_name)
-    customer_nb = len(instance_param[1])
-    location_nb = len(instance_param[2])
-    fac_opening_cost = instance_param[0]
-    customer_demand = instance_param[1]
-    fac_capacity = instance_param[2]
-
-    print('There are {} customers.'.format(customer_nb))
-    print('There are {} possible factories.'.format(location_nb))
-
+def greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac_capacity):
     # Initialize integer solution values
     x = np.zeros((customer_nb, location_nb), dtype=np.int)
     y = np.zeros(location_nb, dtype=np.bool)
-
-    x_opt = np.zeros_like(x, dtype=np.float)
-    y_opt = np.zeros_like(y, dtype=np.float)
-
-    # Get relaxed LP solution values
-    opt_val, x_opt_pyomo, y_opt_pyomo = solve_flp(instance_name, False)
-
-    # Encode those values into numpy arrays for easiness
-    for idx in x_opt_pyomo:
-        x_opt[idx] = x_opt_pyomo[idx].value
-    for idx in y_opt_pyomo:
-        y_opt[idx] = y_opt_pyomo[idx].value
-
-    # Start rounding the values with a Greedy Rounding algorithm
 
     # Sort y in decreasing order
     # We build an index array
@@ -152,6 +128,50 @@ def initial_solution_flp(instance_name):
         # Returns the values if the customer demand has been satisfied
         if not continue_rounding:
             return x, y
+
+
+def initial_solution_flp(instance_name):
+    instance_param = read_instance(instance_name)
+    customer_nb = len(instance_param[1])
+    location_nb = len(instance_param[2])
+    customer_demand = np.array(list(instance_param[1].values()))
+    fac_opening_cost = np.array(list(instance_param[0].values()))
+    fac_capacity = np.array(list(instance_param[2].values()))
+
+    # Convert dict to 2D numpy array
+    transport_cost = instance_param[3]
+    transport_cost_np = np.zeros((customer_nb, location_nb), dtype=np.int)
+    i, j = zip(*transport_cost.keys())
+    np.add.at(transport_cost_np, tuple((i, j)), tuple(transport_cost.values()))
+    transport_cost = transport_cost_np
+
+    print('There are {} customers.'.format(customer_nb))
+    print('There are {} possible factories.'.format(location_nb))
+
+    x_opt = np.zeros((customer_nb, location_nb), dtype=np.float)
+    y_opt = np.zeros(location_nb, dtype=np.float)
+
+    # Get relaxed LP solution values
+    opt_val, x_opt_pyomo, y_opt_pyomo = solve_flp(instance_name, False)
+
+    # Encode those values into numpy arrays for easiness
+    for idx in x_opt_pyomo:
+        x_opt[idx] = x_opt_pyomo[idx].value
+    for idx in y_opt_pyomo:
+        y_opt[idx] = y_opt_pyomo[idx].value
+
+    # Start rounding the values with a Greedy Rounding algorithm
+    x_greedy, y_greedy = greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac_capacity)
+
+    # Compute optimality gap between rounded solution and relaxed LP solution
+    opening_cost = np.transpose(fac_opening_cost) @ y_greedy
+    transport_cost = np.sum(np.transpose(transport_cost) @ x_greedy)
+
+    rounded_cost = opening_cost + transport_cost
+
+    cost_gap = opt_val - rounded_cost
+
+    return cost_gap, x_greedy, y_greedy
 
 
 def local_search_flp(x, y):
