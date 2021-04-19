@@ -1,6 +1,5 @@
 import pyomo.environ as pyo
 import sys
-import time
 
 
 def read_instance(file_name):
@@ -32,16 +31,6 @@ def read_instance(file_name):
     # capacity of each factory, travel cost to customer i from factory j
 
 
-def test():  # test pyomo concrete model functions
-    model = pyo.ConcreteModel()
-
-    model.x = pyo.Var([1, 2], domain=pyo.NonNegativeReals)
-
-    model.OBJ = pyo.Objective(expr=2 * model.x[1] + 3 * model.x[2])
-
-    model.Constraint1 = pyo.Constraint(expr=3 * model.x[1] + 4 * model.x[2] >= 1)
-
-
 def solve_flp(instance_name, linear):
     instance_param = read_instance(instance_name)
 
@@ -53,9 +42,10 @@ def solve_flp(instance_name, linear):
     model.d = pyo.Param(model.I, initialize=instance_param[1], default=0)  # customer demand (I)
     model.t = pyo.Param(model.I, model.J, initialize=instance_param[3], default=0)  # cost to move 1 unit from J to I
 
-    model.x = pyo.Var(model.I, model.J,
-                      domain=pyo.NonNegativeIntegers)  # integer amount of client i demand that is satisfied by facility j
-    model.y = pyo.Var(model.J, domain=pyo.Binary)  # yj = 1 if factory j is built, 0 else
+    # integer amount of client i demand that is satisfied by facility j
+    model.x = pyo.Var(model.I, model.J, domain=pyo.NonNegativeReals if linear else pyo.NonNegativeIntegers)
+    # yj = 1 if factory j is built, 0 else
+    model.y = pyo.Var(model.J, domain=pyo.PercentFraction if linear else pyo.Binary)
 
     def obj_rule(_model):
         return (
@@ -72,9 +62,8 @@ def solve_flp(instance_name, linear):
                 sum(_model.x[i, j] for i in _model.I) <= _model.y[j] * _model.c[j]
         )
 
-    model.constraint_1 = pyo.Constraint(model.J, rule=cst1)  # the sum of the units sent from one factory to all its
-
-    # customer cannot be above its capacity (if it's open)
+    # the sum of the units sent from one factory to all its customer cannot be above its capacity (if it's open)
+    model.constraint_1 = pyo.Constraint(model.J, rule=cst1)
 
     def cst2(_model, i):
         return (
@@ -84,14 +73,20 @@ def solve_flp(instance_name, linear):
     model.constraint_2 = pyo.Constraint(model.I, rule=cst2)  # for each customer all the demand must be satisfied
 
     opt = pyo.SolverFactory('glpk')
+
     opt.solve(model, tee=True)
-    # print results
-    print(pyo.value(model.obj))
-    for i in model.x:
-        print(str(model.x[i]), model.x[i].value)
+
+    list_x = [[0 for x in range(len(instance_param[2]))] for y in range(len(instance_param[3]))]
+    list_y = [0 for x in range(len(instance_param[2]))]
+
+    for i in model.I:
+        for j in model.J:
+            list_x[i][j] = model.x[i, j].value
+
     for j in model.y:
-        print(str(model.y[j]), model.y[j].value)
-        # return (obj,x,y)
+        list_y[j] = model.y[j].value
+
+    return pyo.value(model.obj), list_x, list_y
 
 
 def initial_solution_flp(instance_name):
@@ -105,5 +100,4 @@ def local_search_flp(x, y):
 
 
 if __name__ == '__main__':
-    test()
-    solve_flp('FLP-100-20-1.txt', False)  # test
+    print(solve_flp(str(sys.argv[1]), False))  # test
