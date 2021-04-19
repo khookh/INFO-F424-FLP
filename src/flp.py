@@ -1,6 +1,8 @@
 import pyomo.environ as pyo
+import numpy as np
 import sys
 import time
+import os
 
 
 def read_instance(file_name):
@@ -54,8 +56,8 @@ def solve_flp(instance_name, linear):
     model.t = pyo.Param(model.I, model.J, initialize=instance_param[3], default=0)  # cost to move 1 unit from J to I
 
     model.x = pyo.Var(model.I, model.J,
-                      domain=pyo.NonNegativeIntegers)  # integer amount of client i demand that is satisfied by facility j
-    model.y = pyo.Var(model.J, domain=pyo.Binary)  # yj = 1 if factory j is built, 0 else
+                      domain=pyo.NonNegativeIntegers if linear else pyo.NonNegativeReals)  # integer amount of client i demand that is satisfied by facility j
+    model.y = pyo.Var(model.J, domain=pyo.Binary if linear else pyo.PercentFraction)  # yj = 1 if factory j is built, 0 else
 
     def obj_rule(_model):
         return (
@@ -85,18 +87,71 @@ def solve_flp(instance_name, linear):
 
     opt = pyo.SolverFactory('glpk')
     opt.solve(model, tee=True)
-    # print results
-    print(pyo.value(model.obj))
-    for i in model.x:
-        print(str(model.x[i]), model.x[i].value)
-    for j in model.y:
-        print(str(model.y[j]), model.y[j].value)
-        # return (obj,x,y)
+    
+    return pyo.value(model.obj), model.x, model.y
 
 
 def initial_solution_flp(instance_name):
-    pass
-    # return (obj,x,y)
+    instance_param = read_instance(instance_name)
+    customer_nb = len(instance_param[1])
+    location_nb = len(instance_param[2])
+    fac_opening_cost = instance_param[0]
+    customer_demand = instance_param[1]
+    fac_capacity = instance_param[2]
+
+    print('There are {} customers.'.format(customer_nb))
+    print('There are {} possible factories.'.format(location_nb))
+
+    # Initialize integer solution values
+    x = np.zeros((customer_nb, location_nb), dtype=np.int)
+    y = np.zeros(location_nb, dtype=np.bool)
+
+    x_opt = np.zeros_like(x, dtype=np.float)
+    y_opt = np.zeros_like(y, dtype=np.float)
+
+    # Get relaxed LP solution values
+    opt_val, x_opt_pyomo, y_opt_pyomo = solve_flp(instance_name, False)
+
+    # Encode those values into numpy arrays for easiness
+    for idx in x_opt_pyomo:
+        x_opt[idx] = x_opt_pyomo[idx].value
+    for idx in y_opt_pyomo:
+        y_opt[idx] = y_opt_pyomo[idx].value
+
+    # Start rounding the values with a Greedy Rounding algorithm
+
+    # Sort y in decreasing order
+    # We build an index array
+    y_opt_order = np.flip(np.argsort(y_opt))
+
+    for j_idx in range(location_nb):
+        # Get the j_idx index
+        # Start with the facility location j with the best score (optimized by relaxation LP)
+        j = y_opt_order[j_idx]
+
+        # Value set to True, factory will be used
+        y[j] = True
+
+        # Sort x[:, j] in decreasing order.
+        # Start with the supply assignation giving the best score (optimized by relaxation LP)
+        x_opt_order = np.flip(np.argsort(x_opt[:, j]))
+        for i_idx in range(customer_nb):
+            i = x_opt_order[i_idx]
+            # Checks if the facility capacity has not been reached yet
+            # and checks if the customer demand is still not satisfied
+            if np.sum(x[:, j]) < fac_capacity[j] and np.sum(x[i, :]) < customer_demand[i]:
+                # Puts at maximum while not exceeding the capacity/demand
+                x[i, j] = min(fac_capacity[j] - np.sum(x[:, j]), customer_demand[i] - np.sum(x[i, :]))
+
+        # Checks if all customer demand has been satisfied
+        continue_rounding = False
+        for i in range(customer_nb):
+            if np.sum(x[i, :]) < customer_demand[i]:
+                continue_rounding = True
+
+        # Returns the values if the customer demand has been satisfied
+        if not continue_rounding:
+            return x, y
 
 
 def local_search_flp(x, y):
@@ -106,4 +161,8 @@ def local_search_flp(x, y):
 
 if __name__ == '__main__':
     test()
-    solve_flp('FLP-100-20-1.txt', False)  # test
+    # solve_flp('FLP-100-20-1.txt', False)  # test
+    for f_name in os.listdir('./instances/'):
+        x, y = initial_solution_flp(f_name)
+        print(x, y)
+
