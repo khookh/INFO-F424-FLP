@@ -52,9 +52,6 @@ def solve_flp(instance_name, linear):
                 pyo.summation(_model.f, _model.y)  # cost of opening facilities
                 + pyo.summation(_model.t, _model.x)  # cost of moving units from facilities to clients
         )
-        # sum(instance_name[0][j] * model.y[j] for j in model.J) + sum(
-        #             instance_name[3][i, j] * model.x[i, j] for i in model.I for j in model.J)
-
     model.obj = pyo.Objective(rule=obj_rule, sense=pyo.minimize)  # minimize the cost of operation
 
     def cst1(_model, j):
@@ -83,7 +80,7 @@ def solve_flp(instance_name, linear):
         for j in model.J:
             list_x[i][j] = model.x[i, j].value
 
-    for j in model.y:
+    for j in model.J:
         list_y[j] = model.y[j].value
 
     return pyo.value(model.obj), list_x, list_y
