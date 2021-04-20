@@ -110,9 +110,6 @@ def solve_flp(instance_name, linear):
     for j in model.J:
         list_y[j] = model.y[j].value
 
-    verif_demand(list_x, instance_param[1])  # for testing purpose, verify solution integrity
-    verif_capacity(list_x, instance_param[2])
-
     return pyo.value(model.obj), list_x, list_y
 
 
@@ -177,20 +174,18 @@ def initial_solution_flp(instance_name):
     y_opt = np.zeros(location_nb, dtype=np.float)
 
     # Get relaxed LP solution values
-    opt_val, x_opt_pyomo, y_opt_pyomo = solve_flp(instance_name, False)
+    opt_val, x_opt_pyomo, y_opt_pyomo = solve_flp(instance_name, True)
 
     # Encode those values into numpy arrays for easiness
-    for idx in x_opt_pyomo:
-        x_opt[idx] = x_opt_pyomo[idx].value
-    for idx in y_opt_pyomo:
-        y_opt[idx] = y_opt_pyomo[idx].value
+    x_opt = np.asarray(x_opt_pyomo, dtype=np.float)
+    y_opt = np.asarray(y_opt_pyomo, dtype=np.float)
 
     # Start rounding the values with a Greedy Rounding algorithm
     x_greedy, y_greedy = greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac_capacity)
 
     # Compute optimality gap between rounded solution and relaxed LP solution
     opening_cost = np.transpose(fac_opening_cost) @ y_greedy
-    transport_cost = np.sum(np.transpose(transport_cost) @ x_greedy)
+    transport_cost = np.sum(np.multiply(transport_cost, x_greedy))
 
     rounded_cost = opening_cost + transport_cost
 
@@ -207,6 +202,6 @@ def local_search_flp(x, y):
 if __name__ == '__main__':
     print(solve_flp(str(sys.argv[1]), False))  # test brute force
 
-    for f_name in os.listdir('./instances/'):
-        x, y = initial_solution_flp(f_name)
-        print(x, y)
+    for f_name in os.listdir('./Instances/'):
+        cost_gap, x, y = initial_solution_flp(f_name)
+        print(cost_gap)
