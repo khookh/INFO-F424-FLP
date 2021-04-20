@@ -1,5 +1,6 @@
 import pyomo.environ as pyo
 import sys
+import matplotlib.pyplot as plt
 
 
 def read_instance(file_name):
@@ -31,6 +32,31 @@ def read_instance(file_name):
     # capacity of each factory, travel cost to customer i from factory j
 
 
+def verif_capacity(x, capacity):
+    delivered = [0] * len(capacity)
+    for elem in x:
+        count = 0
+        for elem2 in elem:
+            delivered[count] += elem2
+            count += 1
+    for i in range(len(capacity)):
+        # print(delivered[i],capacity[i])
+        if delivered[i] > capacity[i]:
+            print("solution not valid : capacity overflow")
+
+
+def verif_demand(x, demand):
+    count = 0
+    for elem in x:
+        somme = 0
+        for elem2 in elem:
+            somme += elem2
+        # print(somme, demand[count])
+        if somme < demand[count]:
+            print("solution not valid : demand isn't fulfilled")
+        count += 1
+
+
 def solve_flp(instance_name, linear):
     instance_param = read_instance(instance_name)
 
@@ -52,6 +78,7 @@ def solve_flp(instance_name, linear):
                 pyo.summation(_model.f, _model.y)  # cost of opening facilities
                 + pyo.summation(_model.t, _model.x)  # cost of moving units from facilities to clients
         )
+
     model.obj = pyo.Objective(rule=obj_rule, sense=pyo.minimize)  # minimize the cost of operation
 
     def cst1(_model, j):
@@ -71,17 +98,19 @@ def solve_flp(instance_name, linear):
 
     opt = pyo.SolverFactory('glpk')
 
-    opt.solve(model, tee=True)
+    opt.solve(model , tee=True)
 
-    list_x = [[0 for x in range(len(instance_param[2]))] for y in range(len(instance_param[3]))]
+    list_x = [[0 for x in range(len(instance_param[2]))] for y in range(len(instance_param[1]))]
     list_y = [0 for x in range(len(instance_param[2]))]
 
     for i in model.I:
         for j in model.J:
             list_x[i][j] = model.x[i, j].value
-
     for j in model.J:
         list_y[j] = model.y[j].value
+
+    verif_demand(list_x, instance_param[1])  # for testing purpose, verify solution integrity
+    verif_capacity(list_x, instance_param[2])
 
     return pyo.value(model.obj), list_x, list_y
 
@@ -96,5 +125,22 @@ def local_search_flp(x, y):
     # return (obj,x,y)
 
 
+def plot_dnn():
+    plt.figure(figsize=[10, 5])
+    xaxis100 = [20, 30, 40]
+    val100 = [0.13, 11.73, 331.1]
+    xaxis150 = [30, 45]
+    val150 = [1.3, 302.2]
+
+    plt.plot(xaxis100, val100, color='r', label='100 customers')
+    plt.plot(xaxis150, val150, color='g', label='150 customers')
+    plt.legend()
+    plt.xlabel('factories')
+    plt.ylabel('time (s)')
+    plt.savefig('plotA.png')
+    plt.close()
+
+
 if __name__ == '__main__':
+    plot_dnn()
     print(solve_flp(str(sys.argv[1]), False))  # test
