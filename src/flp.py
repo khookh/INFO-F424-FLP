@@ -125,22 +125,5 @@ def local_search_flp(x, y):
     # return (obj,x,y)
 
 
-def plot_dnn():
-    plt.figure(figsize=[10, 5])
-    xaxis100 = [20, 30, 40]
-    val100 = [0.13, 11.73, 331.1]
-    xaxis150 = [30, 45]
-    val150 = [1.3, 302.2]
-
-    plt.plot(xaxis100, val100, color='r', label='100 customers')
-    plt.plot(xaxis150, val150, color='g', label='150 customers')
-    plt.legend()
-    plt.xlabel('factories')
-    plt.ylabel('time (s)')
-    plt.savefig('plotA.png')
-    plt.close()
-
-
 if __name__ == '__main__':
-    plot_dnn()
     print(solve_flp(str(sys.argv[1]), False))  # test
