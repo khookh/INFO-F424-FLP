@@ -1,6 +1,7 @@
 import pyomo.environ as pyo
+import numpy as np
 import sys
-import matplotlib.pyplot as plt
+import os
 
 
 def read_instance(file_name):
@@ -98,7 +99,7 @@ def solve_flp(instance_name, linear):
 
     opt = pyo.SolverFactory('glpk')
 
-    opt.solve(model , tee=True)
+    opt.solve(model, tee=True)
 
     list_x = [[0 for x in range(len(instance_param[2]))] for y in range(len(instance_param[1]))]
     list_y = [0 for x in range(len(instance_param[2]))]
@@ -115,9 +116,87 @@ def solve_flp(instance_name, linear):
     return pyo.value(model.obj), list_x, list_y
 
 
+def greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac_capacity):
+    # Initialize integer solution values
+    x = np.zeros((customer_nb, location_nb), dtype=np.int)
+    y = np.zeros(location_nb, dtype=np.bool)
+
+    # Sort y in decreasing order
+    # We build an index array
+    y_opt_order = np.flip(np.argsort(y_opt))
+
+    for j_idx in range(location_nb):
+        # Get the j_idx index
+        # Start with the facility location j with the best score (optimized by relaxation LP)
+        j = y_opt_order[j_idx]
+
+        # Value set to True, factory will be used
+        y[j] = True
+
+        # Sort x[:, j] in decreasing order.
+        # Start with the supply assignation giving the best score (optimized by relaxation LP)
+        x_opt_order = np.flip(np.argsort(x_opt[:, j]))
+        for i_idx in range(customer_nb):
+            i = x_opt_order[i_idx]
+            # Checks if the facility capacity has not been reached yet
+            # and checks if the customer demand is still not satisfied
+            if np.sum(x[:, j]) < fac_capacity[j] and np.sum(x[i, :]) < customer_demand[i]:
+                # Puts at maximum while not exceeding the capacity/demand
+                x[i, j] = min(fac_capacity[j] - np.sum(x[:, j]), customer_demand[i] - np.sum(x[i, :]))
+
+        # Checks if all customer demand has been satisfied
+        continue_rounding = False
+        for i in range(customer_nb):
+            if np.sum(x[i, :]) < customer_demand[i]:
+                continue_rounding = True
+
+        # Returns the values if the customer demand has been satisfied
+        if not continue_rounding:
+            return x, y
+
+
 def initial_solution_flp(instance_name):
-    pass
-    # return (obj,x,y)
+    instance_param = read_instance(instance_name)
+    customer_nb = len(instance_param[1])
+    location_nb = len(instance_param[2])
+    customer_demand = np.array(list(instance_param[1].values()))
+    fac_opening_cost = np.array(list(instance_param[0].values()))
+    fac_capacity = np.array(list(instance_param[2].values()))
+
+    # Convert dict to 2D numpy array
+    transport_cost = instance_param[3]
+    transport_cost_np = np.zeros((customer_nb, location_nb), dtype=np.int)
+    i, j = zip(*transport_cost.keys())
+    np.add.at(transport_cost_np, tuple((i, j)), tuple(transport_cost.values()))
+    transport_cost = transport_cost_np
+
+    print('There are {} customers.'.format(customer_nb))
+    print('There are {} possible factories.'.format(location_nb))
+
+    x_opt = np.zeros((customer_nb, location_nb), dtype=np.float)
+    y_opt = np.zeros(location_nb, dtype=np.float)
+
+    # Get relaxed LP solution values
+    opt_val, x_opt_pyomo, y_opt_pyomo = solve_flp(instance_name, False)
+
+    # Encode those values into numpy arrays for easiness
+    for idx in x_opt_pyomo:
+        x_opt[idx] = x_opt_pyomo[idx].value
+    for idx in y_opt_pyomo:
+        y_opt[idx] = y_opt_pyomo[idx].value
+
+    # Start rounding the values with a Greedy Rounding algorithm
+    x_greedy, y_greedy = greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac_capacity)
+
+    # Compute optimality gap between rounded solution and relaxed LP solution
+    opening_cost = np.transpose(fac_opening_cost) @ y_greedy
+    transport_cost = np.sum(np.transpose(transport_cost) @ x_greedy)
+
+    rounded_cost = opening_cost + transport_cost
+
+    cost_gap = opt_val - rounded_cost
+
+    return cost_gap, x_greedy, y_greedy
 
 
 def local_search_flp(x, y):
@@ -126,4 +205,8 @@ def local_search_flp(x, y):
 
 
 if __name__ == '__main__':
-    print(solve_flp(str(sys.argv[1]), False))  # test
+    print(solve_flp(str(sys.argv[1]), False))  # test brute force
+
+    for f_name in os.listdir('./instances/'):
+        x, y = initial_solution_flp(f_name)
+        print(x, y)
