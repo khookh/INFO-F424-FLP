@@ -182,7 +182,8 @@ def initial_solution_flp(instance_name):
 
     # Start rounding the values with a Greedy Rounding algorithm
     x_greedy, y_greedy = greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac_capacity)
-    factory_mov(x_greedy, y_greedy, fac_capacity)  # test
+
+    factory_mov(x_greedy, y_greedy, fac_capacity, customer_demand, transport_cost)  # test
     # Compute optimality gap between rounded solution and relaxed LP solution
     opening_cost = np.transpose(fac_opening_cost) @ y_greedy
     transport_cost = np.sum(np.multiply(transport_cost, x_greedy))
@@ -198,7 +199,41 @@ def assignment_mov(x, y):
     pass
 
 
-def factory_mov(x, y, capacity):
+def factory_reassign(x, y, closed_f, open_f, capacity, cost):
+    # array list with index = client and value ROW 1  = amount of product received from the two selected factories
+    # ROW 2 and ROW 3 are the per unit cost of transport for each selected factory
+    delivered = np.zeros((x.shape[0], 3))
+
+    count = 0
+    for elem in x:
+        u = False
+        for c in open_f:
+            if elem[c] != 0:
+                u = True
+                delivered[count][0] += elem[c]
+                elem[c] = 0  # delete open factory assignation
+        if u:
+            for i in range(closed_f.shape[0]):
+                delivered[count][i + 1] = cost[count][closed_f[i]]
+            if i == 0:  # if only one factory to open
+                x[count][closed_f[i]] = delivered[count][0]
+            else:  # if two factories are to be opened, check their travel cost and capacity filling
+                if (delivered[count][1] < delivered[count][2] and np.sum(x[:, closed_f[0]]) + delivered[count][0] <
+                    capacity[closed_f[0]]) or np.sum(x[:, closed_f[1]]) + delivered[count][0] < capacity[closed_f[1]]:
+                    x[count][closed_f[0]] = delivered[count][0]  # assign new value to solution
+                else:
+                    x[count][closed_f[1]] = delivered[count][0]  # assign new value to solution
+
+        count += 1
+    for elem in closed_f:
+        y[elem] = 1
+    for elem in open_f:
+        y[elem] = 0
+
+    return x, y
+
+
+def factory_mov(x, y, capacity, demand, cost):
     # closed_factory is the array containing the indexes of the closed factories
     closed_factories = np.array(np.where(y == False))
 
@@ -223,9 +258,9 @@ def factory_mov(x, y, capacity):
 
     if summed_delivered < summed_capacity:
         # do reassign
-        return x, y
+        return factory_reassign(x, y, random_closed_factories, random_open_factories, capacity, cost)
     else:
-        return factory_mov(x, y, capacity)
+        return factory_mov(x, y, capacity, demand, cost)
 
 
 def local_search_flp(x, y):
