@@ -182,7 +182,7 @@ def initial_solution_flp(instance_name):
 
     # Start rounding the values with a Greedy Rounding algorithm
     x_greedy, y_greedy = greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac_capacity)
-
+    factory_mov(x_greedy, y_greedy, fac_capacity)  # test
     # Compute optimality gap between rounded solution and relaxed LP solution
     opening_cost = np.transpose(fac_opening_cost) @ y_greedy
     transport_cost = np.sum(np.multiply(transport_cost, x_greedy))
@@ -192,6 +192,40 @@ def initial_solution_flp(instance_name):
     cost_gap = opt_val - rounded_cost
 
     return cost_gap, x_greedy, y_greedy
+
+
+def assignment_mov(x, y):
+    pass
+
+
+def factory_mov(x, y, capacity):
+    # closed_factory is the array containing the indexes of the closed factories
+    closed_factories = np.array(np.where(y == False))
+
+    # ""
+    open_factories = np.array(np.where(y == True))
+
+    # takes 0, 1 or 2 (depending on closed_factories.size) unique elements from the closed factories array
+    random_closed_factories = np.random.choice(closed_factories[0], replace=False,
+                                               size=closed_factories.size if closed_factories.size < 2 else 2)
+    # ""
+    random_open_factories = np.random.choice(open_factories[0], replace=False,
+                                             size=closed_factories.size if closed_factories.size < 2 else 2)
+
+    summed_capacity = 0
+    for elem in random_closed_factories:
+        summed_capacity += capacity[elem]
+
+    summed_delivered = 0
+    for elem in x:
+        for fact in random_open_factories:
+            summed_delivered += elem[fact]
+
+    if summed_delivered < summed_capacity:
+        # do reassign
+        return x, y
+    else:
+        return factory_mov(x, y, capacity)
 
 
 def local_search_flp(x, y):
