@@ -184,7 +184,7 @@ def initial_solution_flp(instance_name):
     x_greedy, y_greedy = greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac_capacity)
 
     factory_mov(x_greedy, y_greedy, fac_capacity, customer_demand, transport_cost)  # test
-    assignment_mov(x_greedy, y_greedy)  # test
+    assignment_mov(x_greedy, y_greedy, fac_capacity, customer_demand)  # test
     # Compute optimality gap between rounded solution and relaxed LP solution
     opening_cost = np.transpose(fac_opening_cost) @ y_greedy
     transport_cost = np.sum(np.multiply(transport_cost, x_greedy))
@@ -214,32 +214,54 @@ def factory_reassign(x, y, closed_f, open_f, capacity, demand, cost):  # greedy 
     return x, y
 
 
-def assignment_mov(x, y):
+def assignment_mov(x, y, capacity, demand):
     random_customer = np.array([])
 
     # randomly select up to 2 random customers
     for it in range(np.random.choice([1, 2])):
         random_customer = np.append(random_customer, np.random.choice(x.shape[0]))
 
-    random_factories = np.zeros((2, 2)) - 1
-
+    random_factories = np.array([])
+    if random_factories.size == 0:
+        return x, y
     # randomly select up to 2 factories per customer
-    count = 0
     for elem in random_customer:
         factories = np.array(np.where(x[int(elem)] != 0)).flatten()
+        previous_pick = -1
+        random_pick = -1
         for it in range(2 if factories.size > 1 else 1):
-            random_factories[count, it] = np.random.choice(factories, replace=False)
-        count += 1
+            while random_pick == previous_pick:
+                random_pick = np.random.choice(factories, replace=False)
+            random_factories = np.append(random_factories, random_pick)
+            x[int(elem), int(random_pick)] = 0  # reinitalize this assignment
+            previous_pick = random_pick
 
-    a_d = np.zeros((2, 2)) - 1  # matrix with new assigment
-    for elem in random_factories.flatten():
-        while True and elem != -1:
-            i = np.random.choice([0, 1])
-            j = np.random.choice([0, 1])
-            if random_factories[i][j] != -1 and a_d[i][j] == -1:
-                a_d[i][j] = elem
+    for elem in random_customer:
+        left = demand[int(elem)] - np.sum(x[int(elem), :])
+        while True:
+            random_factoryA = np.random.choice(random_factories, replace=False)
+            random_factoryB = np.random.choice(random_factories, replace=False)
+            roomA = capacity[int(random_factoryA)] - np.sum(x[:, int(random_factoryA)])
+            if random_factoryA != random_factoryB:
+                roomB = capacity[int(random_factoryB)] - np.sum(x[:, int(random_factoryB)])
+            else:
+                roomB = 0
+            if roomA + roomB >= left and roomA > 0:  # if the two (or one) factories selected can satisfy the demand
                 break
-    # TODO : use a_d and random_factories to update the solution
+
+        if random_factoryA != random_factoryB:
+            if left != roomA + roomB:
+                valueA = np.random.choice(np.arange(max(left - roomB, 0), min(roomA, left)))
+            else:
+                valueA = roomA
+            valueB = left - valueA
+            x[int(elem), int(random_factoryB)] = valueB
+        else:
+            valueA = left
+        x[int(elem), int(random_factoryA)] = valueA
+
+    return x, y
+
 
 def factory_mov(x, y, capacity, demand, cost):
     # closed_factory is the array containing the indexes of the closed factories
