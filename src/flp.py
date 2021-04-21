@@ -221,7 +221,7 @@ def assignment_mov(x, y):
     for it in range(np.random.choice([1, 2])):
         random_customer = np.append(random_customer, np.random.choice(x.shape[0]))
 
-    random_factories = np.zeros((2, 2))
+    random_factories = np.zeros((2, 2)) - 1
 
     # randomly select up to 2 factories per customer
     count = 0
@@ -231,9 +231,15 @@ def assignment_mov(x, y):
             random_factories[count, it] = np.random.choice(factories, replace=False)
         count += 1
 
-    # TODO: randomly reassign
-
-
+    a_d = np.zeros((2, 2)) - 1  # matrix with new assigment
+    for elem in random_factories.flatten():
+        while True and elem != -1:
+            i = np.random.choice([0, 1])
+            j = np.random.choice([0, 1])
+            if random_factories[i][j] != -1 and a_d[i][j] == -1:
+                a_d[i][j] = elem
+                break
+    # TODO : use a_d and random_factories to update the solution
 
 def factory_mov(x, y, capacity, demand, cost):
     # closed_factory is the array containing the indexes of the closed factories
