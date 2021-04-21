@@ -184,6 +184,7 @@ def initial_solution_flp(instance_name):
     x_greedy, y_greedy = greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac_capacity)
 
     factory_mov(x_greedy, y_greedy, fac_capacity, customer_demand, transport_cost)  # test
+    assignment_mov(x_greedy, y_greedy)  # test
     # Compute optimality gap between rounded solution and relaxed LP solution
     opening_cost = np.transpose(fac_opening_cost) @ y_greedy
     transport_cost = np.sum(np.multiply(transport_cost, x_greedy))
@@ -195,11 +196,7 @@ def initial_solution_flp(instance_name):
     return cost_gap, x_greedy, y_greedy
 
 
-def assignment_mov(x, y):
-    pass
-
-
-def factory_reassign(x, y, closed_f, open_f, capacity, demand, cost): # greedy reassign
+def factory_reassign(x, y, closed_f, open_f, capacity, demand, cost):  # greedy reassign
     # close and open factories (reassign)
     for elem in closed_f:
         y[elem] = 1
@@ -215,6 +212,27 @@ def factory_reassign(x, y, closed_f, open_f, capacity, demand, cost): # greedy r
             if y[j] == 1 and np.sum(x[:, j]) < capacity[j] and np.sum(x[i, :]) < demand[i]:
                 x[i, j] = min(capacity[j] - np.sum(x[:, j]), demand[i] - np.sum(x[i, :]))
     return x, y
+
+
+def assignment_mov(x, y):
+    random_customer = np.array([])
+
+    # randomly select up to 2 random customers
+    for it in range(np.random.choice([1, 2])):
+        random_customer = np.append(random_customer, np.random.choice(x.shape[0]))
+
+    random_factories = np.zeros((2, 2))
+
+    # randomly select up to 2 factories per customer
+    count = 0
+    for elem in random_customer:
+        factories = np.array(np.where(x[int(elem)] != 0)).flatten()
+        for it in range(2 if factories.size > 1 else 1):
+            random_factories[count, it] = np.random.choice(factories, replace=False)
+        count += 1
+
+    # TODO: randomly reassign
+
 
 
 def factory_mov(x, y, capacity, demand, cost):
@@ -243,6 +261,8 @@ def factory_mov(x, y, capacity, demand, cost):
     if summed_delivered < summed_capacity:
         # do reassign
         return factory_reassign(x, y, random_closed_factories, random_open_factories, capacity, demand, cost)
+    elif closed_factories.size == 0:
+        return x, y
     else:
         return factory_mov(x, y, capacity, demand, cost)
 
