@@ -242,7 +242,7 @@ def initial_solution_flp(instance_name):
     return cost_gap, x_greedy, y_greedy
 
 
-def factory_reassign(x, y, closed_f, open_f, capacity, demand, cost):  # greedy reassign
+def factory_reassign(x, y, closed_f, open_f, capacity, demand, transport_cost):  # greedy reassign
     # close and open factories (reassign)
     for elem in closed_f:
         y[elem] = 1
@@ -253,14 +253,14 @@ def factory_reassign(x, y, closed_f, open_f, capacity, demand, cost):  # greedy 
 
     demand_s_index = np.flip(np.argsort(demand))  # index of customers sorted by demand
     for i in demand_s_index:
-        fcost_s_index = np.argsort(cost[i, :])  # index of facilities sorted by the cost of transport to given customer
+        fcost_s_index = np.argsort(transport_cost[i, :])  # index of facilities sorted by the cost of transport to given customer
         for j in fcost_s_index:
             if y[j] == 1 and np.sum(x[:, j]) < capacity[j] and np.sum(x[i, :]) < demand[i]:
                 x[i, j] = min(capacity[j] - np.sum(x[:, j]), demand[i] - np.sum(x[i, :]))
     return x, y
 
 
-def assignment_mov(x, y, capacity, demand):
+def assignment_mov(x, y, capacity, demand, transport_cost):
     random_customer = np.array([])
 
     # randomly select up to 2 random customers
@@ -309,7 +309,7 @@ def assignment_mov(x, y, capacity, demand):
     return x, y
 
 
-def factory_mov(x, y, capacity, demand, cost):
+def factory_mov(x, y, capacity, demand, transport_cost):
     # closed_factory is the array containing the indexes of the closed factories
     closed_factories = np.array(np.where(y == False))
 
@@ -334,11 +334,11 @@ def factory_mov(x, y, capacity, demand, cost):
 
     if summed_delivered < summed_capacity:
         # do reassign
-        return factory_reassign(x, y, random_closed_factories, random_open_factories, capacity, demand, cost)
+        return factory_reassign(x, y, random_closed_factories, random_open_factories, capacity, demand, transport_cost)
     elif closed_factories.size == 0:
         return x, y
     else:
-        return factory_mov(x, y, capacity, demand, cost)
+        return factory_mov(x, y, capacity, demand, transport_cost)
 
 
 # TODO: Check if we can change the function interface (as it might be tested automatically by the teacher)
@@ -351,6 +351,10 @@ def local_search_flp(x, y):
     """
     global fac_capacity, customer_demand, transport_cost, fac_opening_cost, customer_nb, location_nb, time_criterion, \
         max_iterations
+
+    print('--------------------------\n'
+          'Local search optimisation.\n'
+          '--------------------------')
 
     iter_count = 0
     remaining_time_ms = time_criterion * 1000
@@ -368,10 +372,11 @@ def local_search_flp(x, y):
         begin = time.time()
 
         # Algorithm here
-        x_new, y_new = factory_mov(x, y, fac_capacity, customer_demand, current_cost)
+        x_new, y_new = factory_mov(x, y, fac_capacity, customer_demand, transport_cost)
         new_cost = compute_cost(x_new, y_new, fac_opening_cost, transport_cost)
         if new_cost < current_cost:
             current_cost = new_cost
+            print('Current cost: {} | Iterations: {}/{} | Time remaining: {}s'.format(current_cost, iter_count, max_iterations if max_iterations is not None else 'None', remaining_time_ms / 1000.0))
             x, y = x_new, y_new
 
         delta_time = (time.time() - begin) * 1000
