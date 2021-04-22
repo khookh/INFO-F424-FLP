@@ -4,6 +4,34 @@ import pyomo.environ as pyo
 import numpy as np
 import sys
 
+# Global instance parameters, will be set in the initial_solution function.
+
+# Vector of capacity for each location
+fac_capacity = None
+
+# Vector of demand for each customer
+customer_demand = None
+
+# Matrix of transport cost for each supply unity between client and facility
+transport_cost = None
+
+# Vector of costs for each location openings
+fac_opening_cost = None
+
+# Number of customers
+customer_nb = None
+
+# Number of locations
+location_nb = None
+
+# Time criterion for the search algorithm, by default will stop after 30 mins of search.
+time_criterion = 30 * 60
+
+# Number of maximum iterations criterion
+# !!! SET THIS VALUE TO NONE BEFORE SUBMITTING THE PROJECT !!!
+max_iterations = None
+# !!! SET THIS VALUE TO NONE BEFORE SUBMITTING THE PROJECT !!!
+
 
 def read_instance(file_name):
     opening_cost = {}
@@ -34,7 +62,7 @@ def read_instance(file_name):
     # capacity of each factory, travel cost to customer i from factory j
 
 
-def verif_capacity(x, capacity):
+def verify_capacity(x, capacity):
     delivered = [0] * len(capacity)
     for elem in x:
         count = 0
@@ -47,7 +75,7 @@ def verif_capacity(x, capacity):
             print("solution not valid : capacity overflow")
 
 
-def verif_demand(x, demand):
+def verify_demand(x, demand):
     count = 0
     for elem in x:
         somme = 0
@@ -184,7 +212,10 @@ def convert_instance_to_numpy(instance_param):
     return fac_capacity, customer_demand, transport_cost, fac_opening_cost, customer_nb, location_nb
 
 
-def initial_solution_flp(instance_param):
+def initial_solution_flp(instance_name):
+    global fac_capacity, customer_demand, transport_cost, fac_opening_cost, customer_nb, location_nb
+
+    instance_param = read_instance(instance_name)
     fac_capacity, customer_demand, transport_cost, fac_opening_cost, customer_nb, location_nb \
         = convert_instance_to_numpy(instance_param)
 
@@ -311,19 +342,15 @@ def factory_mov(x, y, capacity, demand, cost):
 
 
 # TODO: Check if we can change the function interface (as it might be tested automatically by the teacher)
-def local_search_flp(x, y, fac_opening_cost, transport_cost, capacity, demand, time_criterion=1800, max_iterations=None):
+def local_search_flp(x, y):
     """
     Performs a local search by iteratively passing to neighbor solutions while improving the cost at each iteration.
     :param x: Initial supply matrix obtained from relaxed LP + greedy rounding
     :param y: Initial factory building vector obtained from relaxed LP + greedy rounding
-    :param fac_opening_cost:  The factory opening cost vector
-    :param transport_cost: The tranport cost matrix
-    :param capacity: The capacity of each factory
-    :param demand: The demand of each customer
-    :param time_criterion: The maximum algorithm time limit in sec (by default 30min)
-    :param max_iterations: The number of maximum iterations
     :return: opt_sol, x_opt, y_opt
     """
+    global fac_capacity, customer_demand, transport_cost, fac_opening_cost, customer_nb, location_nb, time_criterion, \
+        max_iterations
 
     iter_count = 0
     remaining_time_ms = time_criterion * 1000
@@ -341,7 +368,7 @@ def local_search_flp(x, y, fac_opening_cost, transport_cost, capacity, demand, t
         begin = time.time()
 
         # Algorithm here
-        x_new, y_new = factory_mov(x, y, capacity, demand, current_cost)
+        x_new, y_new = factory_mov(x, y, fac_capacity, customer_demand, current_cost)
         new_cost = compute_cost(x_new, y_new, fac_opening_cost, transport_cost)
         if new_cost < current_cost:
             current_cost = new_cost
@@ -360,14 +387,9 @@ if __name__ == '__main__':
         sys.exit(0)
 
     instance_name = sys.argv[1]
-    instance_data = read_instance(instance_name)
 
-    fac_capacity, customer_demand, transport_cost, fac_opening_cost, customer_nb, location_nb \
-        = convert_instance_to_numpy(instance_data)
+    cost_greedy, x_greedy, y_greedy = initial_solution_flp(instance_name)
 
-    cost_greedy, x_greedy, y_greedy = initial_solution_flp(instance_data)
-
-    cost_opt, x_opt, y_opt = local_search_flp(x_greedy, y_greedy, fac_opening_cost,
-                                              transport_cost, fac_capacity, customer_demand, time_criterion=5)
+    cost_opt, x_opt, y_opt = local_search_flp(x_greedy, y_greedy)
 
     print('Greedy cost: {} | Optimal cost: {}'.format(cost_greedy, cost_opt))
