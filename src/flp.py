@@ -1,7 +1,8 @@
+import time
+
 import pyomo.environ as pyo
 import numpy as np
 import sys
-import os
 
 
 def read_instance(file_name):
@@ -152,8 +153,21 @@ def greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac
             return x, y
 
 
-def initial_solution_flp(instance_name):
-    instance_param = read_instance(instance_name)
+def compute_cost(x, y, fac_opening_cost, transport_cost):
+    """
+    Compute the cost function.
+    :param x: The supply matrix (np.array)
+    :param y: The construction vector (np.array)
+    :param fac_opening_cost: The factory opening cost vector (np.array)
+    :param transport_cost: The transport cost matrix (np.array)
+    :return: the total cost (float)
+    """
+    opening_cost = np.sum(np.multiply(fac_opening_cost, y))
+    transport_cost = np.sum(np.multiply(transport_cost, x))
+    return opening_cost + transport_cost
+
+
+def convert_instance_to_numpy(instance_param):
     customer_nb = len(instance_param[1])
     location_nb = len(instance_param[2])
     customer_demand = np.array(list(instance_param[1].values()))
@@ -167,6 +181,13 @@ def initial_solution_flp(instance_name):
     np.add.at(transport_cost_np, tuple((i, j)), tuple(transport_cost.values()))
     transport_cost = transport_cost_np
 
+    return fac_capacity, customer_demand, transport_cost, fac_opening_cost, customer_nb, location_nb
+
+
+def initial_solution_flp(instance_param):
+    fac_capacity, customer_demand, transport_cost, fac_opening_cost, customer_nb, location_nb \
+        = convert_instance_to_numpy(instance_param)
+
     print('There are {} customers.'.format(customer_nb))
     print('There are {} possible factories.'.format(location_nb))
 
@@ -174,7 +195,7 @@ def initial_solution_flp(instance_name):
     y_opt = np.zeros(location_nb, dtype=np.float)
 
     # Get relaxed LP solution values
-    opt_val, x_opt_pyomo, y_opt_pyomo = solve_flp(instance_name, True)
+    opt_val_pyomo, x_opt_pyomo, y_opt_pyomo = solve_flp(instance_name, True)
 
     # Encode those values into numpy arrays for easiness
     x_opt = np.asarray(x_opt_pyomo, dtype=np.float)
@@ -183,14 +204,9 @@ def initial_solution_flp(instance_name):
     # Start rounding the values with a Greedy Rounding algorithm
     x_greedy, y_greedy = greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac_capacity)
 
-    factory_mov(x_greedy, y_greedy, fac_capacity, customer_demand, transport_cost)  # test
-    # Compute optimality gap between rounded solution and relaxed LP solution
-    opening_cost = np.transpose(fac_opening_cost) @ y_greedy
-    transport_cost = np.sum(np.multiply(transport_cost, x_greedy))
+    rounded_cost = compute_cost(x_greedy, y_greedy, fac_opening_cost, transport_cost)
 
-    rounded_cost = opening_cost + transport_cost
-
-    cost_gap = opt_val - rounded_cost
+    cost_gap = opt_val_pyomo - rounded_cost
 
     return cost_gap, x_greedy, y_greedy
 
@@ -263,14 +279,64 @@ def factory_mov(x, y, capacity, demand, cost):
         return factory_mov(x, y, capacity, demand, cost)
 
 
-def local_search_flp(x, y):
-    pass
-    # return (obj,x,y)
+# TODO: Check if we can change the function interface (as it might be tested automatically by the teacher)
+def local_search_flp(x, y, fac_opening_cost, transport_cost, capacity, demand, time_criterion=1800, max_iterations=None):
+    """
+    Performs a local search by iteratively passing to neighbor solutions while improving the cost at each iteration.
+    :param x: Initial supply matrix obtained from relaxed LP + greedy rounding
+    :param y: Initial factory building vector obtained from relaxed LP + greedy rounding
+    :param fac_opening_cost:  The factory opening cost vector
+    :param transport_cost: The tranport cost matrix
+    :param capacity: The capacity of each factory
+    :param demand: The demand of each customer
+    :param time_criterion: The maximum algorithm time limit in sec (by default 30min)
+    :param max_iterations: The number of maximum iterations
+    :return: opt_sol, x_opt, y_opt
+    """
+
+    iter_count = 0
+    remaining_time_ms = time_criterion * 1000
+    initial_cost = compute_cost(x, y, fac_opening_cost, transport_cost)
+    current_cost = initial_cost
+    while True:
+        # Max iteration criteria
+        if max_iterations is not None:
+            if iter_count > max_iterations:
+                break
+        # Max execution time criteria
+        if time_criterion is not None:
+            if remaining_time_ms <= 0:
+                break
+        begin = time.time()
+
+        # Algorithm here
+        x_new, y_new = factory_mov(x, y, capacity, demand, current_cost)
+        new_cost = compute_cost(x_new, y_new, fac_opening_cost, transport_cost)
+        if new_cost < current_cost:
+            current_cost = new_cost
+            x, y = x_new, y_new
+
+        delta_time = (time.time() - begin) * 1000
+        remaining_time_ms -= delta_time
+        iter_count += 1
+
+    return x, y, current_cost
 
 
 if __name__ == '__main__':
-    print(solve_flp(str(sys.argv[1]), False))  # test brute force
+    if len(sys.argv) < 2:
+        print('Usage: python flp.py <instance_file_name>')
+        sys.exit(0)
 
-    for f_name in os.listdir('./Instances/'):
-        cost_gap, x, y = initial_solution_flp(f_name)
-        print(cost_gap)
+    instance_name = sys.argv[1]
+    instance_data = read_instance(instance_name)
+
+    fac_capacity, customer_demand, transport_cost, fac_opening_cost, customer_nb, location_nb \
+        = convert_instance_to_numpy(instance_data)
+
+    cost_greedy, x_greedy, y_greedy = initial_solution_flp(instance_data)
+
+    cost_opt, x_opt, y_opt = local_search_flp(x_greedy, y_greedy, fac_opening_cost,
+                                              transport_cost, fac_capacity, customer_demand, time_criterion=5)
+
+    print('Greedy cost: {} | Optimal cost: {}'.format(cost_greedy, cost_opt))
