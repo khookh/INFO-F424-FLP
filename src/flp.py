@@ -356,10 +356,22 @@ def local_search_flp(x, y):
           'Local search optimisation.\n'
           '--------------------------')
 
+    def print_progress(current_cost, current_iter, max_iter, remaining_time, current_method):
+        print('', end='\r')
+        print('Current cost: {} | Iterations: {}/{} | Time remaining: {:.1f}s ({:.2f}%) | Method: {}'
+              .format(current_cost, iter_count, max_iterations if max_iterations is not None else 'None',
+                      remaining_time_ms / 1000.0, 100.0 * (1 - (remaining_time / 1000.0) / (time_criterion)), current_method.__name__), end='\r')
+
     iter_count = 0
+    failed_iter_count = 0
+
+    failed_iter_limit = 250
+    neighbor_evaluation_method, other_evaluation_method = factory_mov, assignment_mov
+
     remaining_time_ms = time_criterion * 1000
     initial_cost = compute_cost(x, y, fac_opening_cost, transport_cost)
     current_cost = initial_cost
+    print('Initial cost by greedy algorithm: {}'.format(initial_cost))
     while True:
         # Max iteration criteria
         if max_iterations is not None:
@@ -371,19 +383,31 @@ def local_search_flp(x, y):
                 break
         begin = time.time()
 
-        # Algorithm here
-        x_new, y_new = factory_mov(x, y, fac_capacity, customer_demand, transport_cost)
+        # Finds a random neighbor
+        x_new, y_new = neighbor_evaluation_method(x, y, fac_capacity, customer_demand, transport_cost)
+
+        # Computes the cost of the neighbor, if it optimises, then keep it as solution
         new_cost = compute_cost(x_new, y_new, fac_opening_cost, transport_cost)
         if new_cost < current_cost:
             current_cost = new_cost
-            print('Current cost: {} | Iterations: {}/{} | Time remaining: {}s'.format(current_cost, iter_count, max_iterations if max_iterations is not None else 'None', remaining_time_ms / 1000.0))
+            failed_iter_count = 0  # Reset the number of failed iterations
             x, y = x_new, y_new
+            print_progress(current_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method)
+        else:
+            failed_iter_count += 1
+            # Method failed too much times consecutively, we now use the other method
+            if failed_iter_count >= failed_iter_limit:
+                # Method swap
+                neighbor_evaluation_method, other_evaluation_method = \
+                    other_evaluation_method, neighbor_evaluation_method
+                print_progress(current_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method)
+                failed_iter_count = 0
 
         delta_time = (time.time() - begin) * 1000
         remaining_time_ms -= delta_time
         iter_count += 1
 
-    return x, y, current_cost
+    return current_cost, x, y
 
 
 if __name__ == '__main__':
