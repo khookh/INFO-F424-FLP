@@ -1,8 +1,13 @@
+import multiprocessing
 import time
 
 import pyomo.environ as pyo
 import numpy as np
 import sys
+import csv
+import os
+import threading
+import queue
 
 # Global instance parameters, will be set in the initial_solution function.
 
@@ -31,6 +36,9 @@ time_criterion = 30 * 60
 # !!! SET THIS VALUE TO NONE BEFORE SUBMITTING THE PROJECT !!!
 max_iterations = None
 # !!! SET THIS VALUE TO NONE BEFORE SUBMITTING THE PROJECT !!!
+
+historic_fields = ['current_iter', 'current_cost', 'used_method', 'remaining_time']
+historic_values = []
 
 
 def read_instance(file_name):
@@ -356,7 +364,9 @@ def local_search_flp(x, y):
           'Local search optimisation.\n'
           '--------------------------')
 
-    def print_progress(current_cost, current_iter, max_iter, remaining_time, current_method):
+    def print_progress(current_cost, current_iter, max_iter, remaining_time, current_method, reg_history=False):
+        if reg_history:
+            historic_values.append([current_iter, current_cost, current_method.__name__, remaining_time / 100.0])
         print('', end='\r')
         print('Current cost: {} | Iterations: {}/{} | Time remaining: {:.1f}s ({:.2f}%) | Method: {}'
               .format(current_cost, iter_count, max_iterations if max_iterations is not None else 'None',
@@ -371,6 +381,10 @@ def local_search_flp(x, y):
     remaining_time_ms = time_criterion * 1000
     initial_cost = compute_cost(x, y, fac_opening_cost, transport_cost)
     current_cost = initial_cost
+
+    # Register first entry
+    print_progress(current_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method, True)
+
     print('Initial cost by greedy algorithm: {}'.format(initial_cost))
     while True:
         # Max iteration criteria
@@ -392,7 +406,7 @@ def local_search_flp(x, y):
             current_cost = new_cost
             failed_iter_count = 0  # Reset the number of failed iterations
             x, y = x_new, y_new
-            print_progress(current_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method)
+            print_progress(current_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method, reg_history=True)
         else:
             failed_iter_count += 1
             # Method failed too much times consecutively, we now use the other method
@@ -410,15 +424,52 @@ def local_search_flp(x, y):
     return current_cost, x, y
 
 
+def save_history(path):
+    with open(path, 'w') as f:
+        write = csv.writer(f)
+        write.writerow(historic_fields)
+        write.writerows(historic_values)
+
+
+def thread_work(task_queue):
+    while not task_queue.empty():
+        instance_name = task_queue.get()
+        print('Start working on instance: {}'.format(instance_name))
+        cost_greedy, x_greedy, y_greedy = initial_solution_flp(instance_name)
+
+        cost_opt, x_opt, y_opt = local_search_flp(x_greedy, y_greedy)
+
+        print('Task done: Greedy cost: {} | Optimal cost: {}'.format(cost_greedy, cost_opt))
+
+        save_history(os.path.join('../Out', instance_name))
+
+
 if __name__ == '__main__':
+
     if len(sys.argv) < 2:
         print('Usage: python flp.py <instance_file_name>')
         sys.exit(0)
 
     instance_name = sys.argv[1]
 
+    historic_values = []
+
     cost_greedy, x_greedy, y_greedy = initial_solution_flp(instance_name)
 
     cost_opt, x_opt, y_opt = local_search_flp(x_greedy, y_greedy)
 
     print('Greedy cost: {} | Optimal cost: {}'.format(cost_greedy, cost_opt))
+
+    save_history(os.path.join('../Out', instance_name))
+
+    # task_queue = queue.Queue()
+    # for instance_name in os.listdir('./Instances/'):
+    #     task_queue.put(instance_name)
+    #
+    # thread_list = []
+    #
+    # for thread_id in range(multiprocessing.cpu_count()):
+    #     thread_list.append(threading.Thread(target=thread_work, args=(task_queue,), daemon=True))
+    #
+    # for thread in thread_list:
+    #     thread.join()
