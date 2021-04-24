@@ -236,17 +236,18 @@ def assignment_mov(x, y, capacity, demand):
             x[int(elem), int(random_pick)] = 0  # reinitalize this assignment
             previous_pick = random_pick
 
+    # perform reassignment
     for elem in random_customer:
-        left = demand[int(elem)] - np.sum(x[int(elem), :])
+        left = demand[int(elem)] - np.sum(x[int(elem), :]) # what amount of unit is needed to fill the customer's demand
         while True:
             random_factoryA = np.random.choice(random_factories, replace=False)
             random_factoryB = np.random.choice(random_factories, replace=False)
-            roomA = capacity[int(random_factoryA)] - np.sum(x[:, int(random_factoryA)])
+            roomA = capacity[int(random_factoryA)] - np.sum(x[:, int(random_factoryA)]) # capacity left
             if random_factoryA != random_factoryB:
-                roomB = capacity[int(random_factoryB)] - np.sum(x[:, int(random_factoryB)])
+                roomB = capacity[int(random_factoryB)] - np.sum(x[:, int(random_factoryB)]) # capacity left
             else:
                 roomB = 0
-            if roomA + roomB >= left and roomA > 0:  # if the two (or one) factories selected can satisfy the demand
+            if roomA + roomB >= left and roomA > 0:  # if the two (or one) factorie(s) selected can satisfy the demand
                 break
 
         if random_factoryA != random_factoryB:
