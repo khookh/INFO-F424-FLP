@@ -6,6 +6,8 @@ import numpy as np
 import sys
 import csv
 import os
+
+from mov import *
 import threading
 import queue
 
@@ -250,105 +252,6 @@ def initial_solution_flp(instance_name):
     return cost_gap, x_greedy, y_greedy
 
 
-def factory_reassign(x, y, closed_f, open_f, capacity, demand, transport_cost):  # greedy reassign
-    # close and open factories (reassign)
-    for elem in closed_f:
-        y[elem] = 1
-    for elem in open_f:
-        y[elem] = 0
-    for c in open_f:
-        x[:, c] = 0  # cancel transports for factories that are now closed
-
-    demand_s_index = np.flip(np.argsort(demand))  # index of customers sorted by demand
-    for i in demand_s_index:
-        fcost_s_index = np.argsort(transport_cost[i, :])  # index of facilities sorted by the cost of transport to given customer
-        for j in fcost_s_index:
-            if y[j] == 1 and np.sum(x[:, j]) < capacity[j] and np.sum(x[i, :]) < demand[i]:
-                x[i, j] = min(capacity[j] - np.sum(x[:, j]), demand[i] - np.sum(x[i, :]))
-    return x, y
-
-
-def assignment_mov(x, y, capacity, demand, transport_cost):
-    random_customer = np.array([])
-
-    # randomly select up to 2 random customers
-    for it in range(np.random.choice([1, 2])):
-        random_customer = np.append(random_customer, np.random.choice(x.shape[0]))
-
-    random_factories = np.array([])
-    if random_factories.size == 0:
-        return x, y
-    # randomly select up to 2 factories per customer
-    for elem in random_customer:
-        factories = np.array(np.where(x[int(elem)] != 0)).flatten()
-        previous_pick = -1
-        random_pick = -1
-        for it in range(2 if factories.size > 1 else 1):
-            while random_pick == previous_pick:
-                random_pick = np.random.choice(factories, replace=False)
-            random_factories = np.append(random_factories, random_pick)
-            x[int(elem), int(random_pick)] = 0  # reinitalize this assignment
-            previous_pick = random_pick
-
-    # perform reassignment
-    for elem in random_customer:
-        left = demand[int(elem)] - np.sum(x[int(elem), :]) # what amount of unit is needed to fill the customer's demand
-        while True:
-            random_factoryA = np.random.choice(random_factories, replace=False)
-            random_factoryB = np.random.choice(random_factories, replace=False)
-            roomA = capacity[int(random_factoryA)] - np.sum(x[:, int(random_factoryA)]) # capacity left
-            if random_factoryA != random_factoryB:
-                roomB = capacity[int(random_factoryB)] - np.sum(x[:, int(random_factoryB)]) # capacity left
-            else:
-                roomB = 0
-            if roomA + roomB >= left and roomA > 0:  # if the two (or one) factorie(s) selected can satisfy the demand
-                break
-
-        if random_factoryA != random_factoryB:
-            if left != roomA + roomB:
-                valueA = np.random.choice(np.arange(max(left - roomB, 0), min(roomA, left)))
-            else:
-                valueA = roomA
-            valueB = left - valueA
-            x[int(elem), int(random_factoryB)] = valueB
-        else:
-            valueA = left
-        x[int(elem), int(random_factoryA)] = valueA
-
-    return x, y
-
-
-def factory_mov(x, y, capacity, demand, transport_cost):
-    # closed_factory is the array containing the indexes of the closed factories
-    closed_factories = np.array(np.where(y == False))
-
-    # ""
-    open_factories = np.array(np.where(y == True))
-
-    # takes 0, 1 or 2 (depending on closed_factories.size) unique elements from the closed factories array
-    random_closed_factories = np.random.choice(closed_factories[0], replace=False,
-                                               size=closed_factories.size if closed_factories.size < 2 else 2)
-    # ""
-    random_open_factories = np.random.choice(open_factories[0], replace=False,
-                                             size=closed_factories.size if closed_factories.size < 2 else 2)
-
-    summed_capacity = 0
-    for elem in random_closed_factories:
-        summed_capacity += capacity[elem]
-
-    summed_delivered = 0
-    for elem in x:
-        for fact in random_open_factories:
-            summed_delivered += elem[fact]
-
-    if summed_delivered < summed_capacity:
-        # do reassign
-        return factory_reassign(x, y, random_closed_factories, random_open_factories, capacity, demand, transport_cost)
-    elif closed_factories.size == 0:
-        return x, y
-    else:
-        return factory_mov(x, y, capacity, demand, transport_cost)
-
 
 # TODO: Check if we can change the function interface (as it might be tested automatically by the teacher)
 def local_search_flp(x, y):
@@ -377,7 +280,7 @@ def local_search_flp(x, y):
     failed_iter_count = 0
 
     failed_iter_limit = 250
-    neighbor_evaluation_method, other_evaluation_method = factory_mov, assignment_mov
+    neighbor_evaluation_method, other_evaluation_method = factory_mov, assignment_mov_bis
 
     remaining_time_ms = time_criterion * 1000
     initial_cost = compute_cost(x, y, fac_opening_cost, transport_cost)
@@ -452,7 +355,7 @@ if __name__ == '__main__':
         sys.exit(0)
 
     instance_name = sys.argv[1]
-
+    solve_flp(instance_name,False)
     historic_values = []
 
     cost_greedy, x_greedy, y_greedy = initial_solution_flp(instance_name)
