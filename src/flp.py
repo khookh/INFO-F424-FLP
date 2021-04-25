@@ -331,7 +331,9 @@ def local_search_flp(x, y):
 
         # Method failed too much times consecutively, we now use the other method
         if failed_iter_count >= failed_iter_limit:
-            x_temp, y_temp = reseed_method(x, y, fac_capacity, customer_demand, transport_cost)
+            x_temp, y_temp = x.copy(), y.copy()
+            for it in range(np.random.choice([0, 1, 2], replace=False)):
+                x_temp, y_temp = reseed_method(x_temp, y_temp, fac_capacity, customer_demand, transport_cost)
             failed_iter_count = 0
         # Finds a random neighbor
         x_new, y_new = neighbor_evaluation_method(x_temp, y_temp, fac_capacity, customer_demand, transport_cost)
