@@ -31,8 +31,8 @@ customer_nb = None
 # Number of locations
 location_nb = None
 
-# Time criterion for the search algorithm, by default will stop after 30 mins of search.
-time_criterion = 30 * 60
+# Time criterion for the search algorithm, by default will stop after 10 mins of search.
+time_criterion = 5 * 60
 
 # Number of maximum iterations criterion
 # !!! SET THIS VALUE TO NONE BEFORE SUBMITTING THE PROJECT !!!
@@ -306,8 +306,8 @@ def local_search_flp(x, y):
 
     iter_count = 0
     failed_iter_count = 0
-
     failed_iter_limit = 500
+    failed_cycle_count = 0
     neighbor_evaluation_method, reseed_method = assignment_mov_bis, factory_mov
 
     remaining_time_ms = time_criterion * 1000
@@ -329,11 +329,14 @@ def local_search_flp(x, y):
                 break
         begin = time.time()
 
-        # Method failed too much times consecutively, we now use the other method
         if failed_iter_count >= failed_iter_limit:
             x_temp, y_temp = x.copy(), y.copy()
-            for it in range(np.random.choice([0, 1, 2], replace=False)):
-                x_temp, y_temp = reseed_method(x_temp, y_temp, fac_capacity, customer_demand, transport_cost)
+            for it in range(np.random.choice(np.arange(0, int(y.shape[0] / 10) + min(int(failed_cycle_count / 20), 5)))):
+                x_temp, y_temp = np.random.choice([reseed_method, neighbor_evaluation_method])(x_temp, y_temp,
+                                                                                               fac_capacity,
+                                                                                               customer_demand,
+                                                                                               transport_cost)
+            failed_cycle_count += 1
             failed_iter_count = 0
         # Finds a random neighbor
         x_new, y_new = neighbor_evaluation_method(x_temp, y_temp, fac_capacity, customer_demand, transport_cost)
@@ -341,10 +344,12 @@ def local_search_flp(x, y):
         # Computes the cost of the neighbor, if it optimises, then keep it as solution
         new_cost = compute_cost(x_new, y_new, fac_opening_cost, transport_cost)
         if new_cost < current_cost:
-            print(neighbor_evaluation_method.__name__)
-            print(remaining_time_ms, current_cost, new_cost)
+            print(new_cost, remaining_time_ms)
+            print_progress(new_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method,
+                           True)
             current_cost = new_cost
             failed_iter_count = 0
+            failed_cycle_count = 0
             x, y = x_new, y_new
             x_temp, y_temp = x.copy(), y.copy()
         else:
@@ -352,8 +357,8 @@ def local_search_flp(x, y):
 
         delta_time = (time.time() - begin) * 1000
         remaining_time_ms -= delta_time
-        if integrity_check(x, y) is False:  # for test purpose (temp)
-            break
+        # if integrity_check(x, y) is False:  # for test purpose (temp)
+        #    break
         iter_count += 1
 
     return current_cost, x, y
