@@ -148,7 +148,9 @@ def solve_flp(instance_name, linear):
             list_x[i][j] = model.x[i, j].value
     for j in model.J:
         list_y[j] = model.y[j].value
-
+    print("brute cost :",
+          compute_cost(np.asarray(list_x, dtype=np.float), np.asarray(list_y, dtype=np.float), fac_opening_cost,
+                       transport_cost))  # temp
     return pyo.value(model.obj), list_x, list_y
 
 
@@ -305,13 +307,13 @@ def local_search_flp(x, y):
     iter_count = 0
     failed_iter_count = 0
 
-    failed_iter_limit = 250
-    neighbor_evaluation_method, other_evaluation_method = factory_mov, assignment_mov_bis
+    failed_iter_limit = 500
+    neighbor_evaluation_method, reseed_method = assignment_mov_bis, factory_mov
 
     remaining_time_ms = time_criterion * 1000
     initial_cost = compute_cost(x, y, fac_opening_cost, transport_cost)
     current_cost = initial_cost
-
+    x_temp, y_temp = x.copy(), y.copy()
     # Register first entry
     print_progress(current_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method, True)
 
@@ -327,33 +329,29 @@ def local_search_flp(x, y):
                 break
         begin = time.time()
 
+        # Method failed too much times consecutively, we now use the other method
+        if failed_iter_count >= failed_iter_limit:
+            x_temp, y_temp = reseed_method(x, y, fac_capacity, customer_demand, transport_cost)
+            failed_iter_count = 0
         # Finds a random neighbor
-        x_new, y_new = neighbor_evaluation_method(x, y, fac_capacity, customer_demand, transport_cost)
+        x_new, y_new = neighbor_evaluation_method(x_temp, y_temp, fac_capacity, customer_demand, transport_cost)
 
         # Computes the cost of the neighbor, if it optimises, then keep it as solution
         new_cost = compute_cost(x_new, y_new, fac_opening_cost, transport_cost)
         if new_cost < current_cost:
+            print(neighbor_evaluation_method.__name__)
+            print(remaining_time_ms, current_cost, new_cost)
             current_cost = new_cost
-            failed_iter_count = 0  # Reset the number of failed iterations
+            failed_iter_count = 0
             x, y = x_new, y_new
-            print_progress(current_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method,
-                           reg_history=True)
+            x_temp, y_temp = x.copy(), y.copy()
         else:
             failed_iter_count += 1
-            # Method failed too much times consecutively, we now use the other method
-            if failed_iter_count >= failed_iter_limit:
-                # Method swap
-                neighbor_evaluation_method, other_evaluation_method = \
-                    other_evaluation_method, neighbor_evaluation_method
-                print_progress(current_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method)
-                failed_iter_count = 0
 
         delta_time = (time.time() - begin) * 1000
         remaining_time_ms -= delta_time
-        if integrity_check(x,y) is False : # for test purpose (temp)
+        if integrity_check(x, y) is False:  # for test purpose (temp)
             break
-        print(neighbor_evaluation_method.__name__)
-        print(remaining_time_ms, current_cost)
         iter_count += 1
 
     return current_cost, x, y
@@ -386,11 +384,11 @@ if __name__ == '__main__':
         sys.exit(0)
 
     instance_name = sys.argv[1]
-    solve_flp(instance_name, False)
+
     historic_values = []
 
     cost_greedy, x_greedy, y_greedy = initial_solution_flp(instance_name)
-
+    solve_flp(instance_name, False)
     cost_opt, x_opt, y_opt = local_search_flp(x_greedy, y_greedy)
 
     print('Greedy cost: {} | Optimal cost: {}'.format(cost_greedy, cost_opt))

@@ -42,6 +42,8 @@ def assignment_mov(x, y, capacity, demand, transport_cost):
     # randomly select up to 2 factories per customer
     for elem in random_customer:
         factories = np.array(np.where(x[int(elem)] != 0)).flatten()
+        if factories.size == 0:
+            return x,y
         for it in range(2 if factories.size > 1 else 1):
             if factories.size == 0:
                 break
@@ -139,7 +141,6 @@ def assignment_mov_bis(x, y, capacity, demand, transport_cost):
             random_pick = np.random.choice(factories, replace=False)
             factories = factories[factories != random_pick]
             random_factories = np.append(random_factories, random_pick)
-            print(elem, random_pick)
 
     for elem in random_customer:
         for fac in random_factories:
@@ -156,5 +157,4 @@ def assignment_mov_bis(x, y, capacity, demand, transport_cost):
             for j in fcost_s_index:
                 if j in random_factories and np.sum(x[:, j]) < capacity[j] and np.sum(x[i, :]) < demand[i]:
                     x[i, j] = min(capacity[j] - np.sum(x[:, j]), demand[i] - np.sum(x[i, :]))
-                    print(i, j, x[i, j], demand[i], np.sum(x[i, :]))
     return x, y
