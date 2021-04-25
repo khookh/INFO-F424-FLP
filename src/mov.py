@@ -42,9 +42,9 @@ def assignment_mov(x, y, capacity, demand, transport_cost):
     # randomly select up to 2 factories per customer
     for elem in random_customer:
         factories = np.array(np.where(x[int(elem)] != 0)).flatten()
-        if factories.size == 0:
-            return x,y
         for it in range(2 if factories.size > 1 else 1):
+            if factories.size == 0:
+                break
             random_pick = np.random.choice(factories, replace=False)
             factories = factories[factories != random_pick]
             random_factories = np.append(random_factories, random_pick)
@@ -66,7 +66,7 @@ def assignment_mov(x, y, capacity, demand, transport_cost):
                 break
 
         if random_factoryA != random_factoryB:
-            if left != roomA + roomB:
+            if min(roomA, left) != max(left - roomB, 0):
                 valueA = np.random.choice(np.arange(max(left - roomB, 0), min(roomA, left)))
             else:
                 valueA = roomA
@@ -133,26 +133,28 @@ def assignment_mov_bis(x, y, capacity, demand, transport_cost):
     # randomly select up to 2 factories per customer
     for elem in random_customer:
         factories = np.array(np.where(x[int(elem)] != 0)).flatten()
-        if factories.size == 0:
-            return x,y
         for it in range(2 if factories.size > 1 else 1):
+            if factories.size == 0:
+                break
             random_pick = np.random.choice(factories, replace=False)
             factories = factories[factories != random_pick]
             random_factories = np.append(random_factories, random_pick)
-            x[int(elem), int(random_pick)] = 0  # reinitalize this assignment
+            print(elem, random_pick)
 
+    for elem in random_customer:
+        for fac in random_factories:
+            x[int(elem), int(fac)] = 0  # reinitialize assignments
 
     # perform reassignment
-    demand_x = np.array([demand[int(random_customer[0])], demand[int(random_customer[1])]])
-    demand_s_index = np.flip(np.argsort(demand_x))  # index of customers sorted by demand
+
+    demand_s_index = np.flip(np.argsort(demand))  # index of customers sorted by demand
 
     for i in demand_s_index:
-        t_cost_f = np.array([])
-        for elem in random_factories:
-            t_cost_f = np.append(t_cost_f, transport_cost[i, int(elem)])
-        fcost_s_index = np.argsort(
-            t_cost_f)  # index of facilities sorted by the cost of transport to given customer
-        for j in fcost_s_index:
-            if y[j] == 1 and np.sum(x[:, j]) < capacity[j] and np.sum(x[i, :]) < demand[i]:
-                x[i, j] = min(capacity[j] - np.sum(x[:, j]), demand[i] - np.sum(x[i, :]))
+        if i in random_customer:
+            fcost_s_index = np.argsort(
+                transport_cost[i, :])  # index of facilities sorted by the cost of transport to given customer
+            for j in fcost_s_index:
+                if j in random_factories and np.sum(x[:, j]) < capacity[j] and np.sum(x[i, :]) < demand[i]:
+                    x[i, j] = min(capacity[j] - np.sum(x[:, j]), demand[i] - np.sum(x[i, :]))
+                    print(i, j, x[i, j], demand[i], np.sum(x[i, :]))
     return x, y

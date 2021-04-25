@@ -152,6 +152,32 @@ def solve_flp(instance_name, linear):
     return pyo.value(model.obj), list_x, list_y
 
 
+def integrity_check(x, y):
+    """
+    :param x: sol
+    :param y: sol
+    :return: True if sol is acceptable
+    Function used for test purpose : it tests the solution validity
+    """
+    closed_factories = np.array(np.where(y == False))
+    for j in range(y.shape[0]):
+        if y[j] != 0 and y[j] != 1:
+            print("factory opening value not boolean")
+            return False
+        if np.sum(x[:, j]) > fac_capacity[j]:
+            print("factory capacity overflow")
+            return False
+    for elem in closed_factories:
+        if np.sum(x[:, elem]) != 0:
+            print("closed factory has assignments")
+            return False
+    for i in range(x.shape[0]):
+        if np.sum(x[i, :]) < customer_demand[i]:
+            print("customer demand not fulfilled")
+            return False
+    return True
+
+
 def greedy_rounding(x_opt, y_opt, customer_nb, location_nb, customer_demand, fac_capacity):
     # Initialize integer solution values
     x = np.zeros((customer_nb, location_nb), dtype=np.int)
@@ -252,7 +278,6 @@ def initial_solution_flp(instance_name):
     return cost_gap, x_greedy, y_greedy
 
 
-
 # TODO: Check if we can change the function interface (as it might be tested automatically by the teacher)
 def local_search_flp(x, y):
     """
@@ -274,7 +299,8 @@ def local_search_flp(x, y):
         print('', end='\r')
         print('Current cost: {} | Iterations: {}/{} | Time remaining: {:.1f}s ({:.2f}%) | Method: {}'
               .format(current_cost, iter_count, max_iterations if max_iterations is not None else 'None',
-                      remaining_time_ms / 1000.0, 100.0 * (1 - (remaining_time / 1000.0) / (time_criterion)), current_method.__name__), end='\r')
+                      remaining_time_ms / 1000.0, 100.0 * (1 - (remaining_time / 1000.0) / (time_criterion)),
+                      current_method.__name__), end='\r')
 
     iter_count = 0
     failed_iter_count = 0
@@ -310,7 +336,8 @@ def local_search_flp(x, y):
             current_cost = new_cost
             failed_iter_count = 0  # Reset the number of failed iterations
             x, y = x_new, y_new
-            print_progress(current_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method, reg_history=True)
+            print_progress(current_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method,
+                           reg_history=True)
         else:
             failed_iter_count += 1
             # Method failed too much times consecutively, we now use the other method
@@ -323,6 +350,10 @@ def local_search_flp(x, y):
 
         delta_time = (time.time() - begin) * 1000
         remaining_time_ms -= delta_time
+        if integrity_check(x,y) is False : # for test purpose (temp)
+            break
+        print(neighbor_evaluation_method.__name__)
+        print(remaining_time_ms, current_cost)
         iter_count += 1
 
     return current_cost, x, y
@@ -355,7 +386,7 @@ if __name__ == '__main__':
         sys.exit(0)
 
     instance_name = sys.argv[1]
-    solve_flp(instance_name,False)
+    solve_flp(instance_name, False)
     historic_values = []
 
     cost_greedy, x_greedy, y_greedy = initial_solution_flp(instance_name)
