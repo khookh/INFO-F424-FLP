@@ -32,7 +32,7 @@ customer_nb = None
 location_nb = None
 
 # Time criterion for the search algorithm, by default will stop after 10 mins of search.
-time_criterion = 5 * 60
+time_criterion = 10 * 60
 
 # Number of maximum iterations criterion
 # !!! SET THIS VALUE TO NONE BEFORE SUBMITTING THE PROJECT !!!
@@ -306,10 +306,10 @@ def local_search_flp(x, y):
 
     iter_count = 0
     failed_iter_count = 0
-    failed_iter_limit = 500
     failed_cycle_count = 0
+    failed_iter_limit = 400
     neighbor_evaluation_method, reseed_method = assignment_mov_bis, factory_mov
-
+    iter=0
     remaining_time_ms = time_criterion * 1000
     initial_cost = compute_cost(x, y, fac_opening_cost, transport_cost)
     current_cost = initial_cost
@@ -331,11 +331,12 @@ def local_search_flp(x, y):
 
         if failed_iter_count >= failed_iter_limit:
             x_temp, y_temp = x.copy(), y.copy()
-            for it in range(np.random.choice(np.arange(0, int(y.shape[0] / 10) + min(int(failed_cycle_count / 20), 5)))):
+            for it in range(np.random.choice(np.arange(0, int(y.shape[0] / 10) + min(int(failed_cycle_count / 5), 6)))):
                 x_temp, y_temp = np.random.choice([reseed_method, neighbor_evaluation_method])(x_temp, y_temp,
                                                                                                fac_capacity,
                                                                                                customer_demand,
                                                                                                transport_cost)
+                iter=it
             failed_cycle_count += 1
             failed_iter_count = 0
         # Finds a random neighbor
@@ -344,7 +345,7 @@ def local_search_flp(x, y):
         # Computes the cost of the neighbor, if it optimises, then keep it as solution
         new_cost = compute_cost(x_new, y_new, fac_opening_cost, transport_cost)
         if new_cost < current_cost:
-            print(new_cost, remaining_time_ms)
+            print(iter, new_cost, remaining_time_ms,failed_cycle_count,failed_iter_count)
             print_progress(new_cost, iter_count, max_iterations, remaining_time_ms, neighbor_evaluation_method,
                            True)
             current_cost = new_cost
@@ -389,18 +390,18 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         print('Usage: python flp.py <instance_file_name>')
         sys.exit(0)
+    for file in os.listdir('Instances'):
+        instance_name = file
 
-    instance_name = sys.argv[1]
+        historic_values = []
 
-    historic_values = []
+        cost_greedy, x_greedy, y_greedy = initial_solution_flp(file)
+        #solve_flp(instance_name, False)
+        cost_opt, x_opt, y_opt = local_search_flp(x_greedy, y_greedy)
 
-    cost_greedy, x_greedy, y_greedy = initial_solution_flp(instance_name)
-    solve_flp(instance_name, False)
-    cost_opt, x_opt, y_opt = local_search_flp(x_greedy, y_greedy)
+        print('Greedy cost: {} | Optimal cost: {}'.format(cost_greedy, cost_opt))
 
-    print('Greedy cost: {} | Optimal cost: {}'.format(cost_greedy, cost_opt))
-
-    save_history(os.path.join('../Out', instance_name))
+        save_history(os.path.join('../Out', instance_name))
 
     # task_queue = queue.Queue()
     # for instance_name in os.listdir('./Instances/'):

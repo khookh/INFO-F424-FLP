@@ -71,10 +71,13 @@ def assignment_mov_reassign_greedy_random(x, y, capacity, demand, random_custome
             fcost_s_index = np.argsort(
                 transport_cost[i, :])  # index of facilities sorted by the cost of transport to given customer
             while np.sum(x[i, :]) < demand[i]:
+
                 for j in fcost_s_index:
+
                     if j in random_factories and np.sum(x[:, j]) < capacity[j] and np.sum(x[i, :]) < demand[i]:
+
                         x[i, j] += int(
-                            np.random.choice(1, min(capacity[j] - np.sum(x[:, j]), demand[i] - np.sum(x[i, :])))[0])
+                            np.random.choice(np.arange(0, 1+min(capacity[j] - np.sum(x[:, j]), demand[i] - np.sum(x[i, :])))))
     return x, y
 
 
@@ -110,7 +113,7 @@ def factory_mov(x, y, capacity, demand, transport_cost):
         return factory_mov(x, y, capacity, demand, transport_cost)
 
 
-def assignment_mov_bis(x, y, capacity, demand, transport_cost):
+def assignment_mov_bis(x, y, capacity, demand, transport_cost, function):
     """
     second implementation of this method, for tweaking purpose
     :param x: initial sol
